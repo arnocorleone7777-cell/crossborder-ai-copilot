@@ -1,0 +1,53 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: crossborder_bi
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Run python scripts/init_env.py first}
+      MYSQL_ROOT_HOST: '%'
+      COPILOT_READER_PASSWORD: ${MYSQL_PASSWORD:?Run python scripts/init_env.py first}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/db/init_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./scripts/mysql-reader.sh:/docker-entrypoint-initdb.d/02-reader.sh:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'MYSQL_PWD="$$MYSQL_ROOT_PASSWORD" mysql -h 127.0.0.1 -u root -e "SELECT 1" >/dev/null 2>&1']
+      interval: 5s
+      timeout: 4s
+      retries: 25
+  seed:
+    build: .
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    command: ['python','-m','backend.db.seed_anomaly_data','--mysql']
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: 'no'
+  app:
+    build: .
+    ports: ['127.0.0.1:8000:8000']
+    environment:
+      DATABASE_ENGINE: mysql
+      MYSQL_HOST: mysql
+      MYSQL_USER: copilot_reader
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MODEL_PROVIDER: ${MODEL_PROVIDER:-demo}
+      OLLAMA_BASE_URL: ${OLLAMA_DOCKER_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2:7b}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-8192}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+      RETRIEVAL_MODE: ${RETRIEVAL_MODE:-lexical}
+      API_TOKEN: ${API_TOKEN:-}
+    extra_hosts: ['host.docker.internal:host-gateway']
+    volumes:
+      - app_data:/app/data
+      - creative_assets:/app/generated
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+volumes:
+  mysql_data:
+  app_data:
+  creative_assets:

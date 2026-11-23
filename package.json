@@ -1,0 +1,1 @@
+{"name":"crossborder-ai-copilot-project","private":true,"version":"1.0.0","type":"module","scripts":{"build":"npm --prefix frontend run build && node scripts/package-frontend.mjs","dev":"npm --prefix frontend run dev","test":".venv/bin/python -m pytest -q"}}
